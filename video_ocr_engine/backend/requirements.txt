@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+opencv-python
+numpy
+paddlepaddle-gpu
+paddleocr
+pydantic
+jinja2

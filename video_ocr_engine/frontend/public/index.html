@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMEGA Video OCR Engine UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .magnifier {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            width: 100px;
+            height: 100px;
+            pointer-events: none;
+            display: none;
+            background-repeat: no-repeat;
+        }
+        #video-preview { cursor: crosshair; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col font-sans">
+
+    <!-- Top Log Console -->
+    <div class="h-32 bg-black border-b border-gray-700 p-4 overflow-y-auto font-mono text-sm" id="log-console">
+        <div class="text-green-400">🧬 OMEGA-CODE-ENTITY v∞ đã online. Ready for tasks.</div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Left Panel: Video Upload & Preview & Color Picker -->
+        <div class="w-1/2 p-4 border-r border-gray-700 flex flex-col">
+            <h2 class="text-xl font-bold mb-4 text-blue-400">Video Input & Configuration</h2>
+            
+            <div class="mb-4">
+                <input type="file" id="video-upload" accept="video/*" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"/>
+            </div>
+
+            <div class="flex gap-4 mb-4">
+                <select id="model-select" class="bg-gray-800 border border-gray-600 rounded p-2 text-sm w-1/2">
+                    <option value="high_recall">HIGH_RECALL (Default)</option>
+                    <option value="fast">FAST MODE</option>
+                </select>
+                <button id="btn-start" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-bold w-1/2">Start OCR Pipeline</button>
+            </div>
+
+            <div class="mb-4 flex items-center justify-between">
+                <button id="btn-magnify" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm font-bold">Toggle Magnifier / Color Picker</button>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm">Picked Color:</span>
+                    <div id="color-swatch" class="w-6 h-6 rounded border border-white bg-transparent"></div>
+                    <span id="color-hex" class="text-sm font-mono text-gray-400">#000000</span>
+                </div>
+            </div>
+
+            <div class="relative flex-1 bg-black rounded border border-gray-700 flex items-center justify-center overflow-hidden">
+                <video id="video-preview" class="max-w-full max-h-full" controls></video>
+                <canvas id="video-canvas" class="hidden"></canvas>
+                <div id="magnifier" class="magnifier"></div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Real-time Editor -->
+        <div class="w-1/2 p-4 flex flex-col">
+            <h2 class="text-xl font-bold mb-4 text-green-400">Real-time Subtitle Editor</h2>
+            <div id="subtitle-list" class="flex-1 overflow-y-auto space-y-4 pr-2">
+                <!-- Subtitle items will stream here -->
+                <div class="text-gray-500 italic text-sm">Waiting for pipeline to start...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const logConsole = document.getElementById('log-console');
+        const subtitleList = document.getElementById('subtitle-list');
+        const btnStart = document.getElementById('btn-start');
+        const videoUpload = document.getElementById('video-upload');
+        const videoPreview = document.getElementById('video-preview');
+        const videoCanvas = document.getElementById('video-canvas');
+        const magnifier = document.getElementById('magnifier');
+        const btnMagnify = document.getElementById('btn-magnify');
+        const colorSwatch = document.getElementById('color-swatch');
+        const colorHex = document.getElementById('color-hex');
+
+        let isMagnifierActive = false;
+        let selectedFile = null;
+
+        // Logging utility
+        function addLog(msg, color = 'text-gray-300') {
+            const div = document.createElement('div');
+            div.className = color;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logConsole.appendChild(div);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // Add subtitle to editor
+        function addSubtitle(segment) {
+            if(subtitleList.innerHTML.includes('Waiting')) subtitleList.innerHTML = '';
+            
+            const div = document.createElement('div');
+            div.className = "bg-gray-800 p-3 rounded border border-gray-700 hover:border-blue-500 transition-colors";
+            div.innerHTML = `
+                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                    <span>#${segment.id} | Track: ${segment.tracking_id}</span>
+                    <span class="font-mono">${segment.start_time.toFixed(3)}s --> ${segment.end_time.toFixed(3)}s</span>
+                    <span class="${segment.confidence < 0.9 ? 'text-yellow-500' : 'text-green-500'}">Conf: ${(segment.confidence*100).toFixed(1)}%</span>
+                </div>
+                <textarea class="w-full bg-gray-900 text-white p-2 rounded border border-gray-700 focus:border-blue-500 outline-none resize-none">${segment.text}</textarea>
+            `;
+            subtitleList.appendChild(div);
+            subtitleList.scrollTop = subtitleList.scrollHeight;
+        }
+
+        // Video upload handling
+        videoUpload.addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            if(selectedFile) {
+                videoPreview.src = URL.createObjectURL(selectedFile);
+                addLog(`Loaded video: ${selectedFile.name}`, 'text-blue-400');
+            }
+        });
+
+        // Start Pipeline & SSE
+        btnStart.addEventListener('click', async () => {
+            if(!selectedFile) return alert('Please upload a video first.');
+            
+            btnStart.disabled = true;
+            btnStart.textContent = 'Processing...';
+            addLog('Initializing OMEGA Pipeline...', 'text-purple-400');
+
+            // Setup SSE Connection
+            const eventSource = new EventSource('http://localhost:8000/api/v1/stream');
+            
+            eventSource.addEventListener('progress', (e) => {
+                const data = JSON.parse(e.data);
+                addLog(`[Pipeline] ${data.msg} (${data.percent.toFixed(1)}%)`);
+            });
+
+            eventSource.addEventListener('complete', (e) => {
+                const data = JSON.parse(e.data);
+                addLog(`Pipeline Complete! Found ${data.segments.length} segments.`, 'text-green-400');
+                
+                // Simulate streaming display of results
+                data.segments.forEach((seg, i) => {
+                    setTimeout(() => addSubtitle(seg), i * 200); // Stagger for UI effect
+                });
+                
+                eventSource.close();
+                btnStart.disabled = false;
+                btnStart.textContent = 'Start OCR Pipeline';
+            });
+
+            eventSource.addEventListener('error', (e) => {
+                addLog(`Error: ${e.data}`, 'text-red-500');
+                eventSource.close();
+                btnStart.disabled = false;
+                btnStart.textContent = 'Start OCR Pipeline';
+            });
+
+            // Trigger Backend
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            try {
+                const res = await fetch('http://localhost:8000/api/v1/process', {
+                    method: 'POST',
+                    body: formData
+                });
+                if(res.ok) addLog('Video uploaded successfully. Engine started.');
+            } catch(err) {
+                addLog(`Upload failed: ${err.message}`, 'text-red-500');
+            }
+        });
+
+        // Magnifier & Color Picker Logic
+        btnMagnify.addEventListener('click', () => {
+            isMagnifierActive = !isMagnifierActive;
+            magnifier.style.display = isMagnifierActive ? 'block' : 'none';
+            btnMagnify.className = isMagnifierActive ? 'bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm font-bold' : 'bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm font-bold';
+            addLog(`Magnifier is now ${isMagnifierActive ? 'ON' : 'OFF'}`);
+        });
+
+        videoPreview.addEventListener('mousemove', (e) => {
+            if(!isMagnifierActive || !selectedFile) return;
+
+            const rect = videoPreview.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Draw current frame to hidden canvas to get pixel data
+            const ctx = videoCanvas.getContext('2d');
+            videoCanvas.width = videoPreview.videoWidth;
+            videoCanvas.height = videoPreview.videoHeight;
+            ctx.drawImage(videoPreview, 0, 0, videoCanvas.width, videoCanvas.height);
+
+            // Position magnifier
+            magnifier.style.left = (e.pageX - 50) + 'px';
+            magnifier.style.top = (e.pageY - 50) + 'px';
+
+            // Calculate ratios
+            const rx = videoCanvas.width / rect.width;
+            const ry = videoCanvas.height / rect.height;
+
+            // Background image for magnifier (using canvas dataURL is slow, this is a mock implementation for UI feel)
+            // Real implementation would use ctx.getImageData and scale it.
+            
+            const px = Math.floor(x * rx);
+            const py = Math.floor(y * ry);
+
+            try {
+                const pixel = ctx.getImageData(px, py, 1, 1).data;
+                const hex = "#" + ("000000" + rgbToHex(pixel[0], pixel[1], pixel[2])).slice(-6);
+                
+                colorSwatch.style.backgroundColor = hex;
+                colorHex.textContent = hex;
+            } catch(e) {} // Handle CORS issues if any
+        });
+
+        function rgbToHex(r, g, b) {
+            return ((r << 16) | (g << 8) | b).toString(16);
+        }
+    </script>
+</body>
+</html>

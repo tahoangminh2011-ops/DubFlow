@@ -1,0 +1,13 @@
+$ErrorActionPreference = 'Stop'
+Write-Host "=== VideoTranslator model update ==="
+python -m pip install --upgrade "groq==1.7.0"
+python -c "import groq; print('groq SDK:', groq.__version__)"
+Write-Host ""
+Write-Host "Cloud models configured by the backend:"
+Write-Host "  STT primary      : whisper-large-v3-turbo"
+Write-Host "  STT quality pass : whisper-large-v3"
+Write-Host "  Translation      : openai/gpt-oss-120b"
+Write-Host "  Translation fallbacks: qwen/qwen3.8-27b, openai/gpt-oss-20b"
+Write-Host ""
+Write-Host "No multi-GB local STT model is downloaded: Groq STT runs in the cloud."
+Write-Host "Run storage_d_setup.ps1 once to write these model settings into your existing .env."

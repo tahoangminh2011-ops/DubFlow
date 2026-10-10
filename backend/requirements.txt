@@ -1,0 +1,59 @@
+# ============================================================
+# FlowAI Backend - Requirements (CHỈ 4 PROVIDER)
+# Đã loại: openai, deepl, deepseek, elevenlabs, edge-tts, replicate
+# ============================================================
+
+# Web framework
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+aiofiles>=23.0.0
+
+# HTTP clients
+httpx>=0.24.0
+requests>=2.31.0
+
+# Groq LLM (dịch thuật)
+groq==1.7.0
+
+# Google Gemini (dịch + STT)
+google-generativeai>=0.3.0
+
+# Google Cloud TTS
+google-cloud-texttospeech>=2.0.0
+edge-tts>=7.0.0
+
+# Audio processing
+mutagen>=1.47.0
+pydub>=0.25.0
+SpeechRecognition>=3.10.0
+
+# Video download
+yt-dlp>=2023.0.0
+
+# OCR (đọc phụ đề từ video)
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+Pillow>=10.0.0
+scipy==1.13.1
+scikit-learn==1.5.2
+
+# Local hard-subtitle OCR (PP-OCRv5 mobile).
+# Local PP-OCRv5 Mobile.
+# IMPORTANT: For the NVIDIA target profile use scripts\\setup_ocr_gpu.ps1.
+# Do NOT keep CPU onnxruntime together with onnxruntime-gpu.
+rapidocr>=3.9.2
+onnxruntime>=1.20.1
+
+# Resource governor
+psutil>=6.0.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# ⚠️ ffmpeg & ffprobe là binary cài RIÊNG (không qua pip).
+# Đảm bảo có trong PATH hoặc trỏ FFMPEG_PATH / FFPROBE_PATH trong .env.
+
+# OCR: xKiro Qwen Vision qua API (không tải model OCR local)
+
